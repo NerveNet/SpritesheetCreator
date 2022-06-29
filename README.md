@@ -1,2 +1,2 @@
 # Spritesheet Creator
-Adobe After Effects Animation Spritesheet Creator Plugin
+Spritesheet Creator Plugin for Adobe After Effects
