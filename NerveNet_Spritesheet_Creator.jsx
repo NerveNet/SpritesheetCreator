@@ -68,6 +68,8 @@
     }
 
     
+    
+    
     function SpritesheetTools(thisObj)
     {
         var version = "1.0.0";
@@ -76,557 +78,14 @@
         
         var windowWidth = 180;
 
-        
-        // File Pattern Items include variable names to be attached to the filename of a generated spritesheet.
-        // Examples:
-        // _#[30,6,5,15]
-        // _#[48,48]
 
-        var filePatternIndex = 1; // the current Active File Pattern Preset that will be applied
-        var filePatterns = [];
-        filePatterns.push(['sprites', 'columns', 'rows', 'fps']);
-        filePatterns.push(['spriteWidth', 'spriteHeight']);
-        
-        
-        function writeTxtFile(data)
-        {
-            // prompt to save file
-            var theFile = new File("~/temp/" + app.project.activeItem.name + ".json");
-            theFile = theFile.saveDlg('Save as:');
-
-            // if user didn't cancel...
-            if (theFile != null)
-            {
-                // open file for "w"riting,
-                theFile.open("w", "TEXT", "????");
-
-                theFile.writeln(data);
-
-                // close the text file
-                theFile.close();
-
-                // open text file in default app
-                //theFile.execute();
-            }
-        }
-
-        function exportFrame(spriteComp, ext)
-        {
-            //render the Composition
-            var ext = ext.toLowerCase();
-
-            //Template
-            var templateBasename = ext.toUpperCase() + " with Alpha";
-            var renderTemplate = false;
-            var outputTemplate = false;
-
-            //shortcut to RenderQueue
-            var queue = app.project.renderQueue;
-
-            //deny rendering on all present RenderQueue Items
-            for (var i = 0; i < queue.items.length; i++)
-            {
-                var item = queue.item(i + 1);
-                if (item.status === RQItemStatus.DONE)
-                {
-                    item.remove();
-                }
-                else if (item.status === RQItemStatus.QUEUED || item === RQItemStatus.WILL_CONTINUE || item === RQItemStatus.NEEDS_OUTPUT)
-                {
-                    item.render = false;
-                }
-            }
-
-            //check if templates are present
-            var tempComp = app.project.items.addComp('temp', 4.0, 4.0, 1.0, 1.0, 1.0);
-            var rqi_tempComp = queue.items.add(tempComp);
-
-            //check if render template exists
-            for (var i = 0; i < rqi_tempComp.templates.length; i++) {
-                if (rqi_tempComp.templates[i] === templateBasename + " Render") {
-                    renderTemplate = rqi_tempComp.templates[i];
-                    break;
-                }
-            }
-
-            //check if output template exists
-            for (var i = 0; i < rqi_tempComp.outputModules[1].templates.length; i++) {
-                if (rqi_tempComp.outputModules[1].templates[i] === templateBasename) {
-                    outputTemplate = rqi_tempComp.outputModules[1].templates[i];
-                    break;
-                }
-            }
-
-            rqi_tempComp.remove();
-            tempComp.remove();
-
-            //extract templates from template file if not found
-            if (!renderTemplate || !outputTemplate) {
-
-                //import template project to save transparent template
-                var exportModuleFilename = templateBasename + ".aep";
-                var exportModuleFile = ((new File($.fileName)).path) + "/SheetahResources/templates/" + exportModuleFilename;
-                exportModuleFile = new ImportOptions(File(exportModuleFile));
-
-                app.project.importFile(exportModuleFile);
-
-                //find the right template item
-                for (var i = 0; i < queue.items.length; i++) {
-                    var item = queue.item(i + 1);
-
-                    if (item.comp.name === ext + "_export") {
-
-                        //save render and output templates
-
-                        if (!renderTemplate) {
-                            renderTemplate = templateBasename + " Render";
-                            item.saveAsTemplate(renderTemplate);
-                        }
-
-                        if (!outputTemplate) {
-                            outputTemplate = templateBasename;
-
-                            var file_name = File.decode("template." + ext),
-                                new_path = "~/template",
-                                new_dir = new Folder(new_path),
-                                new_path = new_dir.fsName;
-
-                            var new_data = {
-                                "Output File Info": {
-
-                                    "Base Path": new_path,
-                                    "File Name": file_name
-
-                                }
-                            };
-
-                            item.outputModules[1].setSettings(new_data);
-                            item.outputModules[1].saveAsTemplate(outputTemplate);
-                        }
-
-                        //clear render queue from dummy item
-                        item.remove();
-
-                        //remove imported Template Project Folder
-                        for (var j = 0; j < app.project.items.length; j++) {
-                            var folder = app.project.item(j + 1);
-
-                            if (folder instanceof FolderItem && folder.name === exportModuleFilename) {
-                                folder.remove();
-                                break;
-                            }
-                        }
-
-                        break;
-                    }
-                }
-
-            }
-            var compRenderItem = queue.items.add(spriteComp);
-
-            //apply render and output templates
-            compRenderItem.applyTemplate(templateBasename + " Render");
-            compRenderItem.outputModules[1].applyTemplate(templateBasename);
-            compRenderItem.timeSpanDuration = spriteComp.duration;
-
-            // save file dialog
-            var renderFile = new File('~/temp/' + spriteComp.name + '.' + ext);
-            renderFile = renderFile.saveDlg('Save Spritesheet', ext.toUpperCase() + ':*.' + ext);
-            //alert(renderFile.name);
-
-            var file_name = File.decode(renderFile.name),
-                new_path = renderFile.path,
-                new_dir = new Folder(new_path),
-                new_path = new_dir.fsName;
-
-            var new_data = {
-                "Output File Info": {
-
-                    "Base Path": new_path,
-                    "File Name": file_name
-
-                }
-            };
-
-            // if user didn't cancel...
-            if (renderFile != null) {
-
-                compRenderItem.outputModules[1].setSettings(new_data);
-
-                //rename file to delete the frame tag "00000"
-                compRenderItem.onStatusChanged = function () {
-                    if (compRenderItem.status === RQItemStatus.DONE) {
-                        queue.stopRendering();
-
-                        //$.sleep(100);
-                        var renamedFile = new File(renderFile.path + '/' + renderFile.name + '00000');
-
-                        //check if file without frame tag is already present and delete to replace
-                        //the user already decided to overwrite the file in the first dialog so removing should be okay
-                        //if we do not remove the file we cannot rename
-                        var alreadyPresentFile = new File(renderFile.path + '/' + renderFile.name);
-                        alreadyPresentFile.remove();
-
-
-                        renamedFile.rename(renderFile.name);
-
-
-                    }
-                }
-
-                //start render
-                queue.render();
-
-            }
-        }
-
-        function OnCreateSpritesheetClick()
-        {
-            var scriptName = "Save Spritesheet";
-            var comp = app.project.activeItem;
-
-            if ((comp == null) || !(comp instanceof CompItem))
-            {
-                alert("Please select or open a composition first.", scriptName);
-                return;
-            }
-            else
-            {
-                //check if animation layers in comp
-                var animationLayers = [];
-                for (var i = 0; i < comp.layers.length; i++)
-                {
-                    var layer = comp.layer(i + 1);
-                    if (layer.timeRemapEnabled && !!layer.property("Time Remap").expression)
-                    {
-                        animationLayers.push({
-                            name: layer.name,
-                            expression: layer.property("Time Remap").expression
-                        });
-                        layer.property("Time Remap").expression = "";
-                        layer.timeRemapEnabled = false;
-                    }
-                }
-                
-
-                var sprites = parseInt(comp.duration / comp.frameDuration);
-                var columns = parseInt(Math.sqrt(sprites));
-                var rows = Math.ceil(sprites / columns);
-
-                var maxTextureWidth = scope.maxWidthDropdown.text === "none" ? 0 : parseInt(scope.maxWidthDropdown.text);
-                if (maxTextureWidth == 0)
-                {
-                    if (scope.columnCount.text === "auto")
-                    {
-                        if (scope.rowCount.text !== "auto")
-                        {
-                            rows = parseInt(scope.rowCount.text);
-                            rows = rows > sprites ? sprites : rows;
-                            columns = Math.ceil(sprites / rows);
-                        }
-                    }
-                    else if (scope.rowCount.text === "auto")
-                    {
-                        columns = parseInt(scope.columnCount.text);
-                        columns = columns > sprites ? sprites : columns;
-                        rows = Math.ceil(sprites / columns);
-                    }
-                }
-                else
-                {
-                    columns = Math.floor(maxTextureWidth / comp.width);
-                    rows = Math.ceil(sprites / columns);
-                }
-                
-
-                /*var spriteWidth = comp.width;
-                var spriteHeight = comp.height;
-                var fps = comp.frameRate;*/
-
-                
-                // build the file name preset according to the active file pattern preset
-                var spriteCompName = comp.name + '_#[';
-                for (var i = 0; i < filePatterns[filePatternIndex].length; i++)
-                {
-                    spriteCompName += eval(filePatterns[filePatternIndex][i]);
-                    if (i !== filePatterns[filePatternIndex].length - 1)
-                        spriteCompName += ',';
-                }
-                ;
-                spriteCompName += ']';
-
-                
-                var finalCompWidth = comp.width * columns;
-                var finalCompHeight = comp.height * rows;
-                if (scope.powerOfTwo.value)
-                {
-                    finalCompWidth = Math.pow(2, parseInt(Math.log(comp.width * columns - 1) / Math.log(2)) + 1);
-                    finalCompHeight = Math.pow(2, parseInt(Math.log(comp.height * rows - 1) / Math.log(2)) + 1);
-                }
-
-                // check if dimensions are exceeded
-                if (finalCompWidth >= 30000 || finalCompHeight >= 30000)
-                {
-                    var error = "Spritesheet Comps ";
-
-                    if (finalCompWidth >= 30000 && finalCompHeight >= 30000) {
-                        error += "width (" + finalCompWidth + "px) and height (" + finalCompHeight;
-                    } else if (finalCompWidth >= 30000) {
-                        error += "width (" + finalCompWidth;
-                    } else if (finalCompHeight >= 30000) {
-                        error += "height (" + finalCompWidth;
-                    }
-
-                    error += "px) exceeds AEs max of 30000px. error:[" + sprites + "," + comp.width + "," + comp.height + "]";
-                    alert(error, scriptName);
-
-                    error = "Your comps ";
-                    if (comp.width > 1000) {
-                        error += "width (" + comp.width + "px)";
-                    }
-                    if (comp.width > 1000 && comp.height > 1000) {
-                        error += " and ";
-                    }
-                    if (comp.height > 1000) {
-                        error += "height (" + comp.height + "px)";
-                    }
-                    if ((comp.width > 1000 || comp.height > 1000) && sprites > 200) {
-                        error += " and your ";
-                    }
-                    if (sprites > 200) {
-                        error += "framcount (" + sprites + ")";
-                    }
-
-                    error += " is very large. Please check your composition.";
-                    alert(error, scriptName);
-
-                    return;
-                }
-
-                var spriteComp = app.project.items.addComp(
-                    spriteCompName, finalCompWidth, finalCompHeight, 
-                    1.0,    // pixelAspect
-                    1.0,    // duration in seconds
-                    1.0     // framerate
-                );
-
-                var rowi = 0;
-                var coli = 0;
-                for (var i = 0; i < sprites; i++)
-                {
-                    var spriteLayer = spriteComp.layers.add(comp);
-
-                    spriteLayer.timeRemapEnabled = true;
-                    spriteLayer.property("Time Remap").expression = i / comp.frameRate;
-
-                    var posp = spriteLayer.position;
-                    var posv = posp.value;
-
-                    posv[0] = posv[0] - spriteComp.width / 2 + comp.width / 2;
-                    posv[1] = posv[1] - spriteComp.height / 2 + comp.height / 2;
-
-                    posv[0] = posv[0] + comp.width * coli;
-                    posv[1] = posv[1] + comp.height * rowi;
-
-                    posp.setValue(posv);
-
-                    coli++;
-                    if (coli > (columns - 1))
-                    {
-                        rowi++;
-                        coli = 0;
-                    }
-                }
-                
-
-                // render spritesheet
-                var desiredFormat = scope.dropdown.selection;
-                desiredFormat = desiredFormat.toString().replace(/\s/g, '');
-                exportFrame(spriteComp, desiredFormat);
-
-                // remove composition
-                spriteComp.remove();
-
-                // restore animation layers
-                for (var i = 0; i < comp.layers.length; i++)
-                {
-                    var layer = comp.layer(i + 1);
-                    for (var j = 0; j < animationLayers.length; j++)
-                    {
-                        if (layer.name === animationLayers[j].name)
-                        {
-                            layer.timeRemapEnabled = true;
-                            layer.expression = animationLayers[j].expression;
-                        }
-                    }
-                }
-
-            }
-
-        }
-
-
-        function OnSetupForAnimationClick()
-        {
-            var scriptName = "Setup Animmation";
-            var activeItem = app.project.activeItem;
-
-            if ((activeItem == null) || !(activeItem instanceof CompItem))
-            {
-                alert("Please select or open a composition first.", scriptName);
-                return;
-            }
-            else
-            {
-                var selectedLayers = activeItem.selectedLayers;
-
-                if (activeItem.selectedLayers.length == 0)
-                {
-                    alert("Please select a layer in the active comp first.", scriptName);
-                    return;
-                }
-                else
-                {
-                    var layer = selectedLayers[0];
-
-                    if (!layer.canSetTimeRemapEnabled)
-                    {
-                        alert("This layer cannot be time remapped. Please Use Comps or MovieClips.", scriptName);
-                        return;
-
-                    } else {
-                        layer.timeRemapEnabled = true;
-                    }
-
-                    app.beginUndoGroup("Sheetah");
-
-                    layer.Effects.addProperty("Slider Control");
-                    layer.property("Time Remap").expression = '(Math.min( parseInt(source.duration/source.frameDuration - 1), Math.max( 0,  parseInt(effect("Slider Control")("Slider")) ) ) | 0)/(1/thisComp.frameDuration)';
-
-                    // advance layer to end of composition
-                    layer.inPoint = 0;
-                    layer.outPoint = activeItem.duration;
-
-                    // move keyframes for good looks
-                    var timeVal = layer.property("Time Remap").keyValue(2);
-                    layer.property("Time Remap").setValueAtTime(activeItem.duration, timeVal);
-                    layer.property("Time Remap").removeKey(2);
-
-                    // add expression to slider map ranges according to comp Values
-                    var slider = ((layer.property("Effects")).property("Slider Control")).property("Slider");
-                    slider.setValueAtTime(0, 0);
-                    //slider.expression = "Math.min( parseInt(source.duration/source.frameDuration), Math.max( 0, value ) ) | 0";
-
-                    layer.effectsActive = true;
-
-                    app.endUndoGroup();
-                }
-            }
-        }
-
-        
-        function OnExportAnimationsClick()
-        {
-            var scriptName = "Export Animations";
-            var activeItem = app.project.activeItem;
-
-            if ((activeItem == null) || !(activeItem instanceof CompItem))
-            {
-                alert("Please select or open a composition first.", scriptName);
-                return;
-            }
-            else
-            {
-                var animations = [];
-                
-                var activeComp = activeItem;
-                for (var i = 0; i < activeComp.layers.length; i++)
-                {
-                    var layer = activeComp.layer(i + 1);
-                    var layerEffects = undefined;
-                    var layerSliderControl = undefined;
-
-                    layerEffects = layer.property("Effects");
-                    layerSliderControl = (!!layerEffects) ? layerEffects.property("Slider Control") : undefined;
-
-                    if (!!layerEffects && !!layerSliderControl && layer.timeRemapEnabled)
-                    {
-                        var anim = {};
-                        anim.name = layer.name;
-                        anim.frameRate = activeComp.frameRate;
-                        anim.frameDuration = activeComp.frameDuration;
-                        anim.duration = layer.outPoint;
-                        anim.length = parseInt(anim.duration / activeComp.frameDuration);
-                        anim.frames = [];
-
-                        var time = 0.0;
-                        for (var frame = 0; frame < anim.length; frame++)
-                        {
-                            anim.frames.push(layer.property("Time Remap").valueAtTime(time, false) * (1 / activeComp.frameDuration));
-                            time = time + activeComp.frameDuration;
-                        }
-
-                        for (var j = 0; j < animations.length; j++)
-                        {
-                            if (anim.name === animations[j].name)
-                            {
-                                layer.name += '_' + i;
-                                anim.name = layer.name;
-                            }
-                        }
-
-                        animations.push(anim);
-                    }
-                    else
-                    {
-                        //primitive error handling
-                        var error = "The layer " + layer.name;
-                        if (!layer.timeRemapEnabled) {
-                            error += " has no Time Remapping";
-                        } else if (!(!!layerEffects)) {
-                            error += " has no Effects attached";
-                        } else if (!(!!layerSliderControl)) {
-                            error += " has no Slider Control attached";
-                        }
-                        error += ". Did you 'Setup' the layer ?";
-                        alert(error, scriptName);
-                    }
-
-                }
-                
-                if (!(!!scope.checkbox.value))
-                {
-                    var res = "";
-                    for (var t = 0; t < animations.length; t++)
-                    {
-                        res += animations[t].name + "\r\n" + animations[t].frames.toString() + "\r\n" + "\r\n";
-                    }
-
-                    scope.modal = new Window("window", "Animations");
-                    scope.modal.margins = [5, 5, 5, 5];
-                    scope.modal.alignChildren = 'left';
-                    scope.modalText = scope.modal.add("editText", [0, 0, 240, 300], "", {
-                        readonly: true,
-                        borderless: true,
-                        multiline: true,
-                        scrollable: true
-                    });
-                    scope.modalText.text = res;
-                    scope.modal.show();
-                }
-                else
-                {
-                    writeTxtFile(JSON.stringify(animations));
-                }
-            }
-        }
         
         
         function SaveSetting(name, value)
         {
             app.settings.saveSetting("NerveNetSpritesheetCreator", name, value);
         }
-        
+
         function LoadSetting(name, defaultValue)
         {
             if (app.settings.haveSetting("NerveNetSpritesheetCreator", name))
@@ -647,12 +106,540 @@
         }
         
         
-        function AddButton(palette, buttonLabel, onclickfunc, rect)
+        
+        
+        function WriteTextFile(data)
         {
-            var newButton = palette.add("button", rect, buttonLabel);
-            newButton.onClick = onclickfunc;
-            return newButton;
+            // prompt to save file
+            var theFile = new File("~/temp/" + app.project.activeItem.name + ".json");
+            theFile = theFile.saveDlg('Save As');
+            if (theFile != null)
+            {
+                theFile.open("w", "TEXT", "????");
+                theFile.writeln(data);
+                theFile.close();
+                // open text file in default app
+                //theFile.execute();
+            }
         }
+
+        
+        function ExportSpritesheet(spriteComp, renderFile, ext)
+        {
+            var ext = ext.toLowerCase();
+            
+            var queue = app.project.renderQueue;
+            
+            // template
+            var templateBasename = ext.toUpperCase() + " with Alpha";
+            var renderTemplate = false;
+            var outputTemplate = false;
+
+            // deny rendering on all present RenderQueue Items
+            for (var i = 0; i < queue.items.length; i++)
+            {
+                var item = queue.item(i + 1);
+                if (item.status === RQItemStatus.DONE)
+                {
+                    item.remove();
+                }
+                else if (item.status === RQItemStatus.QUEUED || item === RQItemStatus.WILL_CONTINUE || item === RQItemStatus.NEEDS_OUTPUT)
+                {
+                    item.render = false;
+                }
+            }
+
+            // check if templates are present
+            var tempComp = app.project.items.addComp('temp', 4.0, 4.0, 1.0, 1.0, 1.0);
+            var rqi_tempComp = queue.items.add(tempComp);
+
+            // check if render template exists
+            for (var i = 0; i < rqi_tempComp.templates.length; i++)
+            {
+                if (rqi_tempComp.templates[i] === templateBasename + " Render")
+                {
+                    renderTemplate = rqi_tempComp.templates[i];
+                    break;
+                }
+            }
+
+            // check if output template exists
+            for (var i = 0; i < rqi_tempComp.outputModules[1].templates.length; i++)
+            {
+                if (rqi_tempComp.outputModules[1].templates[i] === templateBasename)
+                {
+                    outputTemplate = rqi_tempComp.outputModules[1].templates[i];
+                    break;
+                }
+            }
+
+            rqi_tempComp.remove();
+            tempComp.remove();
+
+            // extract templates from template file if not found
+            if (!renderTemplate || !outputTemplate)
+            {
+                // import template project to save transparent template
+                var exportModuleFilename = templateBasename + ".aep";
+                var exportModuleFile = ResourceFilePath('templates/' + exportModuleFilename);
+                exportModuleFile = new ImportOptions(File(exportModuleFile));
+
+                app.project.importFile(exportModuleFile);
+
+                // find the right template item
+                for (var i = 0; i < queue.items.length; i++)
+                {
+                    var item = queue.item(i + 1);
+
+                    if (item.comp.name === ext + "_export")
+                    {
+                        // save render and output templates
+                        if (!renderTemplate)
+                        {
+                            renderTemplate = templateBasename + " Render";
+                            item.saveAsTemplate(renderTemplate);
+                        }
+
+                        if (!outputTemplate)
+                        {
+                            outputTemplate = templateBasename;
+
+                            var file_name = File.decode("template." + ext);
+                            var new_path = "~/template";
+                            var new_dir = new Folder(new_path);
+                            var new_path = new_dir.fsName;
+                            var new_data = {
+                                "Output File Info": {
+                                    "Base Path": new_path,
+                                    "File Name": file_name
+                                }
+                            };
+                            item.outputModules[1].setSettings(new_data);
+                            item.outputModules[1].saveAsTemplate(outputTemplate);
+                        }
+
+                        // clear render queue from dummy item
+                        item.remove();
+
+                        // remove imported Template Project Folder
+                        for (var j = 0; j < app.project.items.length; j++)
+                        {
+                            var folder = app.project.item(j + 1);
+                            if (folder instanceof FolderItem && folder.name === exportModuleFilename)
+                            {
+                                folder.remove();
+                                break;
+                            }
+                        }
+
+                        break;
+                    }
+                }
+            }
+    
+            // apply render and output templates
+            var compRenderItem = queue.items.add(spriteComp);
+            compRenderItem.applyTemplate(templateBasename + " Render");
+            compRenderItem.outputModules[1].applyTemplate(templateBasename);
+            compRenderItem.timeSpanDuration = spriteComp.duration;
+
+            // set output module settings
+            var file_name = File.decode(renderFile.name);
+            var new_path = renderFile.path;
+            var new_dir = new Folder(new_path);
+            var new_path = new_dir.fsName;
+            var new_data = {
+                "Output File Info": {
+                    "Base Path": new_path,
+                    "File Name": file_name
+                }
+            };
+            compRenderItem.outputModules[1].setSettings(new_data);
+
+            // rename file to delete the frame tag "00000"
+            compRenderItem.onStatusChanged = function ()
+            {
+                if (compRenderItem.status === RQItemStatus.DONE)
+                {
+                    queue.stopRendering();
+
+                    //$.sleep(100);
+                    var renamedFile = new File(renderFile.path + '/' + renderFile.name + '00000');
+
+                    // check if file without frame tag is already present and delete to replace
+                    // the user already decided to overwrite the file in the first dialog so removing should be okay
+                    // if we do not remove the file we cannot rename
+                    var alreadyPresentFile = new File(renderFile.path + '/' + renderFile.name);
+                    alreadyPresentFile.remove();
+                    
+                    renamedFile.rename(renderFile.name);
+
+                    if (scope.removeRenderQueue.value === true) {
+                        //queue.items.remove(spriteComp.index);
+                    }
+                }
+            }
+
+            // start render
+            queue.render();
+        }
+
+        function OnCreateSpritesheetClick()
+        {
+            var scriptName = "Create Spritesheet";
+            
+            var activeComp = app.project.activeItem;
+            if ((activeComp == null) || !(activeComp instanceof CompItem))
+            {
+                alert("Please select or open a composition first.", scriptName);
+                return;
+            }
+
+
+            // set variables for pattern match building of filename
+            var spriteWidth = activeComp.width;
+            var spriteHeight = activeComp.height;
+            var fps = activeComp.frameRate;
+            var sprites = parseInt(activeComp.duration / activeComp.frameDuration);
+            var columns = parseInt(Math.sqrt(sprites));
+            var rows = Math.ceil(sprites / columns);
+
+            if (sprites <= 0)
+            {
+                alert("Composition contains no frames.", scriptName);
+                return;
+            }
+
+            
+            // calculate columns and rows
+            if (scope.columnCount.text === "auto")
+            {
+                if (scope.rowCount.text !== "auto")
+                {
+                    rows = parseInt(scope.rowCount.text);
+                    rows = rows > sprites ? sprites : rows;
+                    columns = Math.ceil(sprites / rows);
+                }
+            }
+            else if (scope.rowCount.text === "auto")
+            {
+                columns = parseInt(scope.columnCount.text);
+                columns = columns > sprites ? sprites : columns;
+                rows = Math.ceil(sprites / columns);
+            }
+            
+            var maxTextureWidth = scope.maxWidthDropdown.selection.text === "none" ? 0 : parseInt(scope.maxWidthDropdown.selection.text);
+            if (maxTextureWidth != 0)
+            {
+                // check for breach of max texture width
+                if (columns * spriteWidth > maxTextureWidth)
+                {
+                    columns = Math.floor(maxTextureWidth / activeComp.width);
+                    rows = Math.ceil(sprites / columns);
+                    alert("Column count exceeded max texture width and was clamped.", scriptName);
+                }
+            }
+            
+            
+            // check if dimensions are exceeded
+            var finalCompWidth = activeComp.width * columns;
+            var finalCompHeight = activeComp.height * rows;
+            if (scope.powerOfTwo.value)
+            {
+                finalCompWidth = Math.pow(2, parseInt(Math.log(activeComp.width * columns - 1) / Math.log(2)) + 1);
+                finalCompHeight = Math.pow(2, parseInt(Math.log(activeComp.height * rows - 1) / Math.log(2)) + 1);
+            }
+            
+            if (finalCompWidth >= 30000 || finalCompHeight >= 30000)
+            {
+                var error = "Spritesheet Comps ";
+
+                if (finalCompWidth >= 30000 && finalCompHeight >= 30000) {
+                    error += "width (" + finalCompWidth + "px) and height (" + finalCompHeight;
+                } else if (finalCompWidth >= 30000) {
+                    error += "width (" + finalCompWidth;
+                } else if (finalCompHeight >= 30000) {
+                    error += "height (" + finalCompWidth;
+                }
+
+                error += "px) exceeds AEs max of 30000px. error:[" + sprites + "," + activeComp.width + "," + activeComp.height + "]";
+                alert(error, scriptName);
+
+                error = "Your comps ";
+                if (activeComp.width > 1000) {
+                    error += "width (" + activeComp.width + "px)";
+                }
+                if (activeComp.width > 1000 && activeComp.height > 1000) {
+                    error += " and ";
+                }
+                if (activeComp.height > 1000) {
+                    error += "height (" + activeComp.height + "px)";
+                }
+                if ((activeComp.width > 1000 || activeComp.height > 1000) && sprites > 200) {
+                    error += " and your ";
+                }
+                if (sprites > 200) {
+                    error += "framcount (" + sprites + ")";
+                }
+
+                error += " is very large. Please check your composition.";
+                alert(error, scriptName);
+
+                return;
+            }
+
+
+            // File Pattern Items include variable names to be attached to the filename of a generated spritesheet.
+            // Examples:
+            // _#[30,6,5,15]
+            // _#[48,48]
+            var filePatternIndex = 1; // the current Active File Pattern Preset that will be applied
+            var filePatterns = [
+                ['sprites', 'columns', 'rows', 'fps'],
+                ['spriteWidth', 'spriteHeight']
+            ];
+            var spritesheetCompName = activeComp.name + '_#[';
+            for (var i = 0; i < filePatterns[filePatternIndex].length; i++)
+            {
+                spritesheetCompName += eval(filePatterns[filePatternIndex][i]);
+                if (i !== filePatterns[filePatternIndex].length - 1)
+                {
+                    spritesheetCompName += ',';
+                }
+            }
+            spritesheetCompName += ']';
+
+
+            // disable time remapping on layers
+            var animationLayers = [];
+            for (var i = 0; i < activeComp.layers.length; i++)
+            {
+                var layer = activeComp.layer(i + 1);
+                if (layer.timeRemapEnabled && !!layer.property("Time Remap").expression)
+                {
+                    animationLayers.push({
+                        name: layer.name,
+                        expression: layer.property("Time Remap").expression
+                    });
+                    layer.property("Time Remap").expression = "";
+                    layer.timeRemapEnabled = false;
+                }
+            }
+
+            
+            // add new composition and sprite frame layers
+            var spritesheetComp = app.project.items.addComp(
+                spritesheetCompName, finalCompWidth, finalCompHeight, 
+                1.0,    // pixelAspect
+                1.0,    // duration in seconds
+                1.0     // framerate
+            );
+
+            var rowi = 0;
+            var coli = 0;
+            for (var i = 0; i < sprites; i++)
+            {
+                var spriteLayer = spritesheetComp.layers.add(activeComp);
+
+                spriteLayer.timeRemapEnabled = true;
+                spriteLayer.property("Time Remap").expression = i / activeComp.frameRate;
+                
+                var posv = spriteLayer.position.value;
+
+                posv[0] = posv[0] - spritesheetComp.width / 2 + activeComp.width / 2;
+                posv[1] = posv[1] - spritesheetComp.height / 2 + activeComp.height / 2;
+
+                posv[0] = posv[0] + activeComp.width * coli;
+                posv[1] = posv[1] + activeComp.height * rowi;
+
+                spriteLayer.position.setValue(posv);
+
+                coli++;
+                if (coli > (columns - 1))
+                {
+                    rowi++;
+                    coli = 0;
+                }
+            }
+            
+            
+            // save file dialog (chance for user to cancel)
+            var ext = scope.fileFormat.selection.text;
+            var renderFile = new File('~/temp/' + spritesheetComp.name + '.' + ext);
+            renderFile = renderFile.saveDlg('Save Spritesheet', ext.toUpperCase() + ':*.' + ext);
+            if (renderFile != null)
+            {
+                ExportSpritesheet(spritesheetComp, renderFile, scope.fileFormat.selection.text);
+            }
+
+            
+            // remove composition
+            spritesheetComp.remove();
+
+            
+            // restore time remapping on layers
+            for (var i = 0; i < activeComp.layers.length; i++)
+            {
+                var layer = activeComp.layer(i + 1);
+                for (var j = 0; j < animationLayers.length; j++)
+                {
+                    if (layer.name === animationLayers[j].name)
+                    {
+                        layer.timeRemapEnabled = true;
+                        layer.expression = animationLayers[j].expression;
+                    }
+                }
+            }
+        }
+
+
+        function OnSetupForAnimationClick()
+        {
+            var scriptName = "Setup Animmation";
+            var activeItem = app.project.activeItem;
+
+            if ((activeItem == null) || !(activeItem instanceof CompItem))
+            {
+                alert("Please select or open a composition first.", scriptName);
+                return;
+            }
+
+            if (activeItem.selectedLayers.length == 0)
+            {
+                alert("Please select a layer in the active comp first.", scriptName);
+                return;
+            }
+            
+            if (!layer.canSetTimeRemapEnabled)
+            {
+                alert("This layer cannot be time remapped. Please Use Comps or MovieClips.", scriptName);
+                return;
+            }
+            
+            var selectedLayers = activeItem.selectedLayers;
+            var layer = selectedLayers[0];
+            layer.timeRemapEnabled = true;
+            
+            app.beginUndoGroup("NerveNet");
+
+            layer.Effects.addProperty("Slider Control");
+            layer.property("Time Remap").expression = '(Math.min( parseInt(source.duration/source.frameDuration - 1), Math.max( 0,  parseInt(effect("Slider Control")("Slider")) ) ) | 0)/(1/thisComp.frameDuration)';
+
+            // advance layer to end of composition
+            layer.inPoint = 0;
+            layer.outPoint = activeItem.duration;
+
+            // move keyframes for good looks
+            var timeVal = layer.property("Time Remap").keyValue(2);
+            layer.property("Time Remap").setValueAtTime(activeItem.duration, timeVal);
+            layer.property("Time Remap").removeKey(2);
+
+            // add expression to slider map ranges according to comp Values
+            var slider = ((layer.property("Effects")).property("Slider Control")).property("Slider");
+            slider.setValueAtTime(0, 0);
+            //slider.expression = "Math.min( parseInt(source.duration/source.frameDuration), Math.max( 0, value ) ) | 0";
+
+            layer.effectsActive = true;
+
+            app.endUndoGroup();
+        }
+        
+        function OnExportAnimationsClick()
+        {
+            var scriptName = "Export Animations";
+            var activeItem = app.project.activeItem;
+
+            if ((activeItem == null) || !(activeItem instanceof CompItem))
+            {
+                alert("Please select or open a composition first.", scriptName);
+                return;
+            }
+
+            var animations = [];
+            
+            var activeComp = activeItem;
+            for (var i = 0; i < activeComp.layers.length; i++)
+            {
+                var layer = activeComp.layer(i + 1);
+                var layerEffects = undefined;
+                var layerSliderControl = undefined;
+
+                layerEffects = layer.property("Effects");
+                layerSliderControl = (!!layerEffects) ? layerEffects.property("Slider Control") : undefined;
+
+                if (!!layerEffects && !!layerSliderControl && layer.timeRemapEnabled)
+                {
+                    var anim = {};
+                    anim.name = layer.name;
+                    anim.frameRate = activeComp.frameRate;
+                    anim.frameDuration = activeComp.frameDuration;
+                    anim.duration = layer.outPoint;
+                    anim.length = parseInt(anim.duration / activeComp.frameDuration);
+                    anim.frames = [];
+
+                    var time = 0.0;
+                    for (var frame = 0; frame < anim.length; frame++)
+                    {
+                        anim.frames.push(layer.property("Time Remap").valueAtTime(time, false) * (1 / activeComp.frameDuration));
+                        time = time + activeComp.frameDuration;
+                    }
+
+                    for (var j = 0; j < animations.length; j++)
+                    {
+                        if (anim.name === animations[j].name)
+                        {
+                            layer.name += '_' + i;
+                            anim.name = layer.name;
+                        }
+                    }
+
+                    animations.push(anim);
+                }
+                else
+                {
+                    //primitive error handling
+                    var error = "The layer " + layer.name;
+                    if (!layer.timeRemapEnabled) {
+                        error += " has no Time Remapping";
+                    } else if (!(!!layerEffects)) {
+                        error += " has no Effects attached";
+                    } else if (!(!!layerSliderControl)) {
+                        error += " has no Slider Control attached";
+                    }
+                    error += ". Did you 'Setup' the layer ?";
+                    alert(error, scriptName);
+                }
+
+            }
+            
+            if (!(!!scope.exportToJson.value))
+            {
+                var res = "";
+                for (var t = 0; t < animations.length; t++)
+                {
+                    res += animations[t].name + "\r\n" + animations[t].frames.toString() + "\r\n" + "\r\n";
+                }
+
+                scope.modal = new Window("window", "Animations");
+                scope.modal.margins = [5, 5, 5, 5];
+                scope.modal.alignChildren = 'left';
+                scope.modalText = scope.modal.add("editText", [0, 0, 240, 300], "", {
+                    readonly: true,
+                    borderless: true,
+                    multiline: true,
+                    scrollable: true
+                });
+                scope.modalText.text = res;
+                scope.modal.show();
+            }
+            else
+            {
+                WriteTextFile(JSON.stringify(animations));
+            }
+        }
+        
+        
+        
         
         function AddDivider(panel)
         {
@@ -762,46 +749,57 @@
 
 
             // Force Power Of Two Texture Size Group
-            scope.powerOfTwo = panel.add("checkbox", [0, 0, windowWidth, 24], "Force Size to Power Of Two");
-            scope.powerOfTwo.value = (LoadSetting("PowerOfTwo", "false") === "true") ? true : false;
+            scope.powerOfTwo = panel.add("checkbox", [0, 0, windowWidth, 14], "Force Size to Power Of Two");
+            scope.powerOfTwo.value = LoadSetting("PowerOfTwo", "false") === "true";
             scope.powerOfTwo.onClick = function () {
                 SaveSetting("PowerOfTwo", scope.powerOfTwo.value.toString())
             }
 
             
-            // group
+            // Spritesheet Group
             var spritesheetGroup = panel.add("group", [0, 0, windowWidth, 30]);
 
-            AddButton(spritesheetGroup, "Create Spritesheet", OnCreateSpritesheetClick, [0, 0, 115, 30]);
+            var buttonCreateSpritesheet = spritesheetGroup.add("button", [0, 0, 115, 30], "Create Spritesheet");
+            buttonCreateSpritesheet.onClick = OnCreateSpritesheetClick;
 
             // format dropdown and options
             var fileFormatOptions = ["png"/*, "psd"*/, "tga", "tif"];
-            scope.dropdown = spritesheetGroup.add("dropdownlist", [0, 0, 60, 24], fileFormatOptions);
-            scope.dropdown.onChange = function () {
-                SaveSetting("SpritesheetFileFormat", fileFormatStr);
-            }
+            scope.fileFormat = spritesheetGroup.add("dropdownlist", [0, 0, 60, 24], fileFormatOptions);
             var fileFormatStr = LoadSetting("SpritesheetFileFormat", "png");
             var fileFormatIndex = 0;
             if (fileFormatStr === "png") fileFormatIndex = 0;
             //else if (fileFormatStr === "psd") fileFormatIndex = 1;
             else if (fileFormatStr === "tga") fileFormatIndex = 1;
             else if (fileFormatStr === "tif") fileFormatIndex = 2;
-            scope.dropdown.selection = fileFormatIndex;
+            scope.fileFormat.selection = fileFormatIndex;
+            scope.fileFormat.onChange = function () {
+                SaveSetting("SpritesheetFileFormat", scope.fileFormat.selection.text);
+            }
+            
 
+            // Remove Render Queue
+            /*scope.removeRenderQueue = panel.add("checkbox", [0, 0, windowWidth, 14], "Remove Render Queue Item");
+            scope.removeRenderQueue.value = LoadSetting("RemoveRenderQueueOnFinish", "false") === "true";
+            scope.removeRenderQueue.onClick = function () {
+                SaveSetting("RemoveRenderQueueOnFinish", scope.removeRenderQueue.value.toString());
+            }*/
 
+            
             // Divider
             AddDivider(panel);
 
 
             // Animation Tools
-            AddButton(panel, "Setup for Animation", OnSetupForAnimationClick, [0, 0, windowWidth, 30]);
+            var buttonCreateSpritesheet = panel.add("button", [0, 0, windowWidth, 30], "Setup for Animation");
+            buttonCreateSpritesheet.onClick = OnSetupForAnimationClick;
 
-            AddButton(panel, "Export Animations", OnExportAnimationsClick, [0, 0, windowWidth, 30]);
+            var buttonCreateSpritesheet = panel.add("button", [0, 0, windowWidth, 30], "Export Animations");
+            buttonCreateSpritesheet.onClick = OnExportAnimationsClick;
             
-            scope.checkbox = panel.add("checkbox", [0, 0, windowWidth, 24], "Export Animations to JSON File");
-            scope.checkbox.value = (LoadSetting("ExportAnimationsToJson", "false") === "true") ? true : false;
-            scope.checkbox.onClick = function () {
-                SaveSetting("ExportAnimationsToJson", scope.checkbox.value.toString());
+            scope.exportToJson = panel.add("checkbox", [0, 0, windowWidth, 22], "Export Animations to JSON File");
+            scope.exportToJson.value = LoadSetting("ExportAnimationsToJson", "false") === "true";
+            scope.exportToJson.onClick = function () {
+                SaveSetting("ExportAnimationsToJson", scope.exportToJson.value.toString());
             }
 
 
@@ -819,6 +817,9 @@
     }
 
     
+    
+    
     JSON2API();
     SpritesheetTools(this);
+    
 }
